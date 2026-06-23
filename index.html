@@ -904,16 +904,42 @@
     <button id="backTop">↑</button>
 
     <script>
-        // ========== 配置区 ==========
-        const ADMIN_PASSWORD = "admin123"; // 管理员密码
-        const DEFAULT_COVER = "./d09302e14d700e23d778e09fed161749.jpg";
-        const SITE_START_DATE = new Date("2026-06-20"); // 站点起始日期
-        // ===========================
-
+        // ========== JSONBin云端存储配置 填入你自己的BIN_ID和MASTER_KEY ==========
+        const BIN_ID = "6a3a18e6f5f4af5e29211e5d";
+        const MASTER_KEY = "$2a$10$wtA0tjhfpbIPQGTxHTOwvuRa/B/CB9×0wUwcGUpVMnD4kVFEUwSwG";
+        const ADMIN_PASSWORD = "admin123";
+        const DEFAULT_COVER = "cover-main.jpg";
+        const SITE_START_DATE = new Date("2026-06-20");
         let tempCoverBase64 = "";
-        let editIndex = -1; // 编辑模式的文章下标，-1为发布模式
+        let editIndex = -1;
+        let cloudData = null; // 全局缓存云端数据
 
-        // ========== 统一登录状态校验 ==========
+        // ========== 云端读写核心函数 ==========
+        async function loadCloud() {
+            const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+                headers: { "X-Master-Key": MASTER_KEY }
+            });
+            const json = await res.json();
+            cloudData = json.record;
+        }
+        async function saveCloud() {
+            await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+                method: "PUT",
+                headers: {
+                    "X-Master-Key": MASTER_KEY,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(cloudData)
+            });
+        }
+        function getBlogs() {
+            return cloudData.blogList;
+        }
+        function getMessages() {
+            return cloudData.messageList;
+        }
+
+        // ========== 统一登录状态校验（登录仅本地保存） ==========
         function isAdminLogin() {
             return localStorage.getItem('blogAdminLogin') === 'true';
         }
@@ -933,14 +959,6 @@
             themeBtn.textContent = next === 'dark' ? '☀️' : '🌙';
         });
         initTheme();
-
-        // ========== 总访问量统计 ==========
-        function addSiteVisit() {
-            let count = parseInt(localStorage.getItem('siteVisit') || '0');
-            count++;
-            localStorage.setItem('siteVisit', count);
-            return count;
-        }
 
         // ===================== 实时时间与问候语 =====================
         function updateTime() {
@@ -983,7 +1001,7 @@
             const now = new Date();
             const diffTime = Math.abs(now - SITE_START_DATE);
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            const siteVisit = localStorage.getItem('siteVisit') || 0;
+            const siteVisit = cloudData.siteVisit;
 
             document.getElementById('statArticle').textContent = blogs.length;
             document.getElementById('statComment').textContent = totalComment;
@@ -1068,7 +1086,8 @@
         const messageBtn = document.getElementById('messageBtn');
         const closeMessage = document.getElementById('closeMessage');
 
-        messageBtn.addEventListener('click', () => {
+        messageBtn.addEventListener('click', async () => {
+            await loadCloud();
             messageModal.style.display = 'flex';
             document.body.style.overflow = 'hidden';
             renderMessageList();
@@ -1082,13 +1101,6 @@
             document.body.style.overflow = '';
         }
 
-        function getMessages() {
-            const data = localStorage.getItem('messageList');
-            return data ? JSON.parse(data) : [];
-        }
-        function saveMessages(list) {
-            localStorage.setItem('messageList', JSON.stringify(list));
-        }
         function renderMessageList() {
             const list = getMessages();
             const container = document.getElementById('messageList');
@@ -1110,7 +1122,7 @@
             container.innerHTML = html;
         }
 
-        document.getElementById('sendMsgBtn').addEventListener('click', () => {
+        document.getElementById('sendMsgBtn').addEventListener('click', async () => {
             const name = document.getElementById('msgName').value.trim();
             const content = document.getElementById('msgContent').value.trim();
             if(!name || !content) {
@@ -1119,13 +1131,12 @@
             }
             const now = new Date();
             const time = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-            const list = getMessages();
-            list.push({ name, content, time });
-            saveMessages(list);
+            cloudData.messageList.push({ name, content, time });
+            await saveCloud();
             renderMessageList();
             document.getElementById('msgName').value = '';
             document.getElementById('msgContent').value = '';
-            alert('留言提交成功！');
+            alert('留言提交成功！所有人均可查看！');
         });
 
         // ===================== 封面图片上传 =====================
@@ -1138,46 +1149,6 @@
             };
             reader.readAsDataURL(file);
         });
-
-        // ===================== 博客数据本地存储 =====================
-        const defaultBlogs = [
-            {
-                title: "原生HTML+CSS搭建静态网页入门",
-                desc: "从零讲解页面布局、导航栏、卡片样式，适合Web编程基础课程学习，附带完整可运行源码。",
-                content: "一、HTML基础结构\n网页的基本结构由DOCTYPE、html、head、body四大核心部分组成。\n使用语义化标签header、section、footer可以让页面结构更清晰，代码可读性更强。\n\n二、CSS核心布局\n盒模型是CSS的基础，所有元素都由内容、内边距、边框、外边距组成。\nFlex弹性布局可以轻松实现水平垂直居中、元素等分排列，是现代网页布局的主流方式。\n\n三、开发注意事项\n先规划页面结构再写代码，类名命名要规范，方便后续维护和修改。",
-                time: "2026-06-20",
-                img: "./d09302e14d700e23d778e09fed161749.jpg",
-                views: 0,
-                comments: []
-            },
-            {
-                title: "GitHub Pages部署个人网站完整教程",
-                desc: "手把手教你上传代码、开启静态网页服务，生成永久公网访问链接，解决图片加载常见bug。",
-                content: "一、创建GitHub仓库\n登录GitHub账号，新建一个公开仓库，仓库名可以自定义。\n\n二、上传网页文件\n将本地编写好的html文件、图片资源上传到仓库中，注意文件名不要使用中文。\n\n三、开启Pages服务\n进入仓库Settings，找到Pages选项，选择main分支，保存后等待几分钟即可生成在线链接。\n\n四、常见问题\n图片加载失败大多是路径错误导致的，线上部署要使用相对路径；外网图片存在防盗链，建议全部使用本地图片。",
-                time: "2026-06-21",
-                img: "./4caa6edfb4e28fa1.jpg",
-                views: 0,
-                comments: []
-            },
-            {
-                title: "JS实现图片轮播与本地存储留言功能",
-                desc: "讲解自动轮播、悬停暂停、localStorage持久化留言原理，课程设计加分功能完整实现思路。",
-                content: "一、图片轮播实现原理\n通过定时器setInterval定时切换图片的透明度，实现轮播效果。\n记录当前显示图片的下标，点击按钮时修改下标即可切换到对应图片。\n鼠标移入时清除定时器暂停轮播，移出时重新开启定时器。\n\n二、本地存储留言\nlocalStorage是浏览器提供的本地存储API，可以将数据保存在用户电脑中，刷新页面不会丢失。\n存储时需要将数组转换为JSON字符串，读取时再解析回数组格式。\n\n三、表单验证\n提交表单时判断输入内容是否为空，为空时给出提示，阻止表单提交。",
-                time: "2026-06-22",
-                img: "./20843248_171733913039_2 (1).jpg",
-                views: 0,
-                comments: []
-            }
-        ];
-
-        function getBlogs() {
-            const data = localStorage.getItem('blogList');
-            return data ? JSON.parse(data) : defaultBlogs;
-        }
-        function saveBlogs(list) {
-            localStorage.setItem('blogList', JSON.stringify(list));
-            updateStats();
-        }
 
         // ========== 文章搜索 ==========
         document.getElementById('searchInput').addEventListener('input', function() {
@@ -1239,7 +1210,7 @@
 
             // 删除按钮
             document.querySelectorAll('.delete-btn').forEach(btn => {
-                btn.addEventListener('click', function(e) {
+                btn.addEventListener('click', async function(e) {
                     e.stopPropagation();
                     if(!isAdminLogin()) {
                         alert('请先登录管理员账号');
@@ -1247,9 +1218,8 @@
                     }
                     const index = parseInt(this.dataset.index);
                     if(confirm('确定要删除这篇博客吗？删除后无法恢复')) {
-                        const blogs = getBlogs();
-                        blogs.splice(index, 1);
-                        saveBlogs(blogs);
+                        cloudData.blogList.splice(index, 1);
+                        await saveCloud();
                         renderBlogList(document.getElementById('searchInput').value.trim());
                     }
                 });
@@ -1304,17 +1274,14 @@
             const blogs = getBlogs();
             const blog = blogs[index];
             currentBlogIndex = index;
-
-            // 浏览量+1
-            blogs[index].views = (blogs[index].views || 0) + 1;
-            saveBlogs(blogs);
-
+            // 浏览量+1同步云端
+            cloudData.blogList[index].views = (cloudData.blogList[index].views || 0) + 1;
+            saveCloud();
             document.getElementById('modalTitle').innerText = blog.title;
             document.getElementById('modalTime').innerText = '发布时间：' + blog.time;
-            document.getElementById('modalViews').innerText = `👁️ ${blogs[index].views} 浏览`;
+            document.getElementById('modalViews').innerText = `👁️ ${cloudData.blogList[index].views} 浏览`;
             document.getElementById('modalContent').innerText = blog.content;
             renderCommentList(blog.comments);
-
             articleModal.style.display = 'flex';
             document.body.style.overflow = 'hidden';
         }
@@ -1354,73 +1321,55 @@
             container.innerHTML = html;
         }
 
-        document.getElementById('sendComment').addEventListener('click', function() {
+        document.getElementById('sendComment').addEventListener('click', async function() {
             const name = document.getElementById('commentName').value.trim();
             const text = document.getElementById('commentText').value.trim();
-
             if (!name || !text) {
                 alert('昵称和评论内容不能为空');
                 return;
             }
-
-            const blogs = getBlogs();
             const now = new Date();
             const time = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-
-            blogs[currentBlogIndex].comments.push({ name, text, time });
-            saveBlogs(blogs);
-            renderCommentList(blogs[currentBlogIndex].comments);
-
+            cloudData.blogList[currentBlogIndex].comments.push({ name, text, time });
+            await saveCloud();
+            renderCommentList(cloudData.blogList[currentBlogIndex].comments);
             document.getElementById('commentName').value = '';
             document.getElementById('commentText').value = '';
             alert('评论提交成功！');
         });
 
         // ===================== 发布/保存博客功能 =====================
-        document.getElementById('blogForm').addEventListener('submit', function(e) {
+        document.getElementById('blogForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             if(!isAdminLogin()) {
                 alert('请先登录管理员账号');
                 return;
             }
-
             const title = document.getElementById('blogTitle').value.trim();
             const desc = document.getElementById('blogDesc').value.trim();
             const content = document.getElementById('blogContent').value.trim();
-
             if (!title || !desc || !content) {
                 alert('标题、简介、正文均不能为空');
                 return;
             }
-
             const blogs = getBlogs();
             const now = new Date();
             const time = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
             const coverImg = tempCoverBase64 || DEFAULT_COVER;
-
             if(editIndex >= 0) {
-                // 编辑模式
-                blogs[editIndex].title = title;
-                blogs[editIndex].desc = desc;
-                blogs[editIndex].content = content;
-                blogs[editIndex].img = coverImg;
-                saveBlogs(blogs);
-                alert('博客修改成功！');
+                cloudData.blogList[editIndex].title = title;
+                cloudData.blogList[editIndex].desc = desc;
+                cloudData.blogList[editIndex].content = content;
+cloudData.blogList[editIndex].img = coverImg;
+await saveCloud();
+alert('博客修改成功！');
             } else {
-                // 发布新模式
-                blogs.unshift({
-                    title,
-                    desc,
-                    content,
-                    time,
-                    img: coverImg,
-                    views: 0,
-                    comments: []
+                cloudData.blogList.unshift({
+                    title, desc, content, time, img: coverImg, views: 0, comments: []
                 });
-                saveBlogs(blogs);
+                await saveCloud();
                 alert('博客发布成功！');
             }
-
             renderBlogList();
             resetWriteForm();
         });
@@ -1442,8 +1391,13 @@
         });
 
         // ===================== 页面初始化 =====================
-        addSiteVisit();
-        refreshAuthState();
+        (async function initPage() {
+            await loadCloud();
+            // 访问量+1并同步云端
+            cloudData.siteVisit += 1;
+            await saveCloud();
+            refreshAuthState();
+        })();
     </script>
 </body>
 </html>
